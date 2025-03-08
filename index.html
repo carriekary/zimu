@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>字幕文字解析器</title>
+  <style>
+    body {
+      background-color: #f5f5f5;
+      font-family: 'Noto Serif JP', serif;
+      padding: 10px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding: 20px;
+      background: #2c3e50;
+      color: white;
+      border-radius: 10px;
+    }
+    .file-search-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="file"] {
+      padding: 10px;
+      width: 600px;
+      height: 20px;
+      border: 2px dashed #2c3e50;
+      border-radius: 5px;
+      text-align: center;
+      background-color: #ffffff;
+      color: #2c3e50;
+    }
+    .search-box {
+      padding: 10px;
+      width: 600px;
+      height: 20px;
+      border: 2px dashed #e74c3c;
+      border-radius: 5px;
+      text-align: center;
+      background-color: #ffffff;
+      color: #e74c3e;
+    }
+    .subtitle {
+      margin: 10px 0;
+      padding: 12px;
+      line-height: 1.6;
+      border-radius: 5px;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      cursor: text;
+      transition: background-color 0.3s;
+      user-select: text;
+    }
+    .subtitle:hover {
+      background-color: #f8f9fa;
+    }
+    .color1 { color: #2c3e50; }
+    .color2 { color: #e74c3c; }
+    .highlight {
+      background-color: yellow;
+      font-weight: bold;
+    }
+    .dictionary-popup {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 1000;
+      max-width: 80%;
+      max-height: 80vh;
+      overflow-y: auto;
+      min-width: 300px;
+    }
+    .dictionary-popup.active {
+      display: block;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .dictionary-content {
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    .dictionary-content p {
+      margin: 10px 0;
+    }
+    .dictionary-content ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .dictionary-content li {
+      margin: 5px 0;
+    }
+    .word-reading {
+      font-size: 18px;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    .word-kanji {
+      font-size: 24px;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    .close-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    .overlay.active {
+      display: block;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>小野字幕君</h1>
+    <p>支持格式： .srt / .ass / .docx / .txt</p>
+  </div>
+  
+  <div class="file-search-container">
+    <input type="file" id="fileInput" accept=".ass,.srt,.docx,.txt">
+    <input type="text" id="searchBox" class="search-box" placeholder="输入搜索内容...">
+  </div>
+  
+  <div id="subtitles"></div>
+
+  <div class="overlay" id="overlay"></div>
+  <div class="dictionary-popup" id="dictionaryPopup">
+    <span class="close-button">&times;</span>
+    <h3 id="dictionaryTitle"></h3>
+    <div class="dictionary-content" id="dictionaryContent"></div>
+  </div>
+
+  <script>
+    // 搜索功能逻辑
+    const searchBox = document.getElementById('searchBox');
+    const dictionaryPopup = document.getElementById('dictionaryPopup');
+    const dictionaryTitle = document.getElementById('dictionaryTitle');
+    const dictionaryContent = document.getElementById('dictionaryContent');
+    const overlay = document.getElementById('overlay');
+    const closeButton = document.querySelector('.close-button');
+
+    searchBox.addEventListener('input', () => {
+      const query = searchBox.value.trim();
+      const subtitles = document.querySelectorAll('.subtitle');
+      subtitles.forEach((subtitle, index) => {
+        const originalText = subtitle.dataset.original || subtitle.textContent;
+        subtitle.dataset.original = originalText;
+
+        if (query) {
+          const regex = new RegExp(`(${query})`, 'gi');
+          if (originalText.match(regex)) {
+            const context = [];
+            for (let i = Math.max(0, index - 3); i <= Math.min(subtitles.length - 1, index + 3); i++) {
+              context.push(subtitles[i].dataset.original || subtitles[i].textContent);
+            }
+            subtitle.innerHTML = context
+              .map((text, idx) => idx === 3 ? `<span class="highlight">${text.replace(regex, '<span class="highlight">$1</span>')}</span>` : text)
+              .join('<br>');
+            subtitle.style.display = 'block';
+          } else {
+            subtitle.style.display = 'none';
+          }
+        } else {
+          subtitle.textContent = originalText;
+          subtitle.style.display = 'block';
+        }
+      });
+    });
+
+    // 处理文件选择和解析
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          if (file.name.endsWith('.docx')) {
+            parseDOCX(e.target.result, displaySubtitles);
+          } else if (file.name.endsWith('.txt')) {
+            const content = e.target.result;
+            const subtitles = parseTXT(content);
+            displaySubtitles(subtitles);
+          } else {
+            const content = e.target.result;
+            const subtitles = file.name.endsWith('.ass') ? parseASS(content) : parseSRT(content);
+            displaySubtitles(subtitles);
+          }
+        } catch (error) {
+          showError(`解析失败: ${error.message}`);
+        }
+      };
+      reader.onerror = () => showError('文件读取失败');
+      file.name.endsWith('.docx') ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'utf-8');
+    });
+
+    function parseASS(content) {
+      const lines = content.split('\n');
+      const subtitles = [];
+      let currentSubtitle = '';
+      
+      for (let line of lines) {
+        if (line.startsWith('Dialogue:')) {
+          if (currentSubtitle) {
+            subtitles.push({ text: currentSubtitle.trim() });
+            currentSubtitle = '';
+          }
+          const parts = line.split(',');
+          currentSubtitle = parts.slice(9).join(',').replace(/\\N/g, ' ').replace(/\{.*?\}/g, '');
+        }
+      }
+      
+      if (currentSubtitle) {
+        subtitles.push({ text: currentSubtitle.trim() });
+      }
+      
+      return subtitles;
+    }
+
+    function parseSRT(content) {
+      const blocks = content.replace(/\r/g, '').split(/\n\n+/);
+      return blocks
+        .map(block => {
+          const lines = block.split('\n').filter(l => l.trim());
+          if (lines.length >= 3) {
+            return { text: lines.slice(2).join(' ').trim() };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    }
+
+    function parseDOCX(arrayBuffer, callback) {
+      mammoth.convertToHtml({ arrayBuffer })
+        .then(result => {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = result.value;
+          const subtitles = Array.from(tempDiv.querySelectorAll('p'))
+            .filter(p => p.textContent.trim() !== '')
+            .map(p => ({ text: p.textContent.trim() }));
+          callback(subtitles);
+        })
+        .catch(err => {
+          console.error('DOCX解析错误:', err);
+          showError(`DOCX解析失败: ${err.message}`);
+        });
+    }
+
+    function parseTXT(content) {
+      return content.split('\n')
+        .filter(line => line.trim() !== '')
+        .map(line => ({ text: line.trim() }));
+    }
+
+    function displaySubtitles(subtitles) {
+      const container = document.getElementById('subtitles');
+      container.innerHTML = subtitles.map((sub, index) => `
+        <div class="subtitle ${index % 2 ? 'color2' : 'color1'}" data-text="${sub.text || '空字幕内容'}">${sub.text || '空字幕内容'}</div>
+      `).join('');
+
+      container.querySelectorAll('.subtitle').forEach(subtitle => {
+        subtitle.addEventListener('mouseup', async (e) => {
+          const selection = window.getSelection();
+          const selectedText = selection.toString().trim();
+          
+          if (selectedText) {
+            const data = await searchJapaneseWord(selectedText);
+            showDictionary(selectedText, data);
+          }
+        });
+      });
+    }
+
+    async function searchJapaneseWord(word) {
+      try {
+        dictionaryContent.innerHTML = '<div class="loading"></div>正在查询...';
+        dictionaryPopup.classList.add('active');
+        overlay.classList.add('active');
+        
+        const response = await fetch(`https://jisho.org/api/v1/search/words?keyword=${encodeURIComponent(word)}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('词典查询失败:', error);
+        dictionaryContent.innerHTML = '<p>查询失败，请稍后重试</p>';
+        return null;
+      }
+    }
+
+    function showDictionary(word, data) {
+      dictionaryTitle.textContent = `查询结果: ${word}`;
+      if (data && data.data && data.data.length > 0) {
+        const result = data.data[0];
+        dictionaryContent.innerHTML = `
+          <div class="word-kanji">${result.japanese[0].word || word}</div>
+          <div class="word-reading">${result.japanese[0].reading || '无'}</div>
+          <p><strong>释义：</strong></p>
+          <ul>
+            ${result.senses.map(sense => `
+              <li>${sense.english_definitions.join(', ')}</li>
+            `).join('')}
+          </ul>
+        `;
+      } else {
+        dictionaryContent.innerHTML = '<p>未找到相关释义</p>';
+      }
+    }
+
+    function closeDictionary() {
+      dictionaryPopup.classList.remove('active');
+      overlay.classList.remove('active');
+    }
+
+    closeButton.addEventListener('click', closeDictionary);
+    overlay.addEventListener('click', closeDictionary);
+
+    function showError(message) {
+      const container = document.getElementById('subtitles');
+      container.innerHTML = `<div class="subtitle color2">❌ ${message}</div>`;
+    }
+  </script>
+</body>
+</html> 
