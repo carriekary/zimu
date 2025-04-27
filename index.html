@@ -1,313 +1,294 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>小野字幕君</title>
   <style>
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 20px;
+      margin: 0;
+      padding: 0;
       font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
     }
-    .container {
+    /* Header 区域：左侧网站名字，右侧按钮组 */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-bottom: 1px solid #ccc;
+    }
+    #siteTitle {
+      font-size: 24px;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    #controlsPanel {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-right: 10px;
+    }
+    /* 各个输入区域统一用 inline-flex 显示 */
+    #videoInputContainer,
+    #controls,
+    #fileLoader {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    /* 主容器: 左侧视频区域，右侧字幕区域 */
+    #main-container {
       display: flex;
       width: 100%;
-      gap: 20px;
+      height: calc(100vh - 100px); /* 减去 header 占用的高度 */
     }
-    .left-panel, .right-panel {
+    #video-container, #subtitleContainer {
       flex: 1;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+    }
+    /* 视频区域 */
+    #video-container {
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
     }
-    .video-container {
-      width: 100%;
-      position: relative;
-      padding-bottom: 56.25%;
-      height: 0;
-    }
-    .video-iframe {
-      position: absolute;
-      top: 0;
-      left: 0;
+    #video-container iframe {
       width: 100%;
       height: 100%;
-      border-radius: 10px;
       border: none;
     }
-    .subtitle-container {
-      width: 100%;
-      height: 590px;
+    /* 字幕区域 */
+    #subtitleContainer {
       overflow-y: auto;
-      border-radius: 10px;
-      padding: 15px;
-      background: #ffffff;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .subtitle {
-      margin: 10px 0;
-      padding: 12px;
-      line-height: 1.8;
-      font-size: 15px;
-      font-weight: bold;
-      background: #fff;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .color1 { color: #2c3e50; }
-    .color2 { color: #e74c3c; }
-    /* 笔记功能样式 */
-    .note-container {
-      width: 100%;
-      max-width: 600px;
-      margin-top: 15px;
-      padding: 15px;
-      background: #ffffff;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      border-radius: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    #noteInput {
-      width: 100%;
-      height: 100px;
       padding: 10px;
-      font-size: 15px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
     }
-    input[type="file"], input[type="text"], button {
-      margin-top: 10px;
-      padding: 10px;
-      font-size: 15px;
-      border-radius: 5px;
-      border: 1px solid #ddd;
-      background: #fff;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    #subtitleContainer ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
     }
-    button {
+    #subtitleContainer li {
+      padding: 8px;
       cursor: pointer;
-      background-color: #007bff;
-      color: white;
-      transition: background 0.3s;
     }
-    button:hover {
-      background-color: #0056b3;
+    /* 当前播放字幕高亮为黄色 */
+    #subtitleContainer li.active {
+      background-color: yellow;
+      font-weight: bold;
     }
   </style>
-  <!-- 引入 Mammoth.js 用于 DOCX 解析 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
-  <!-- 引入 kuromoji.js 用于日语分词 -->
-  <script src="https://unpkg.com/kuromoji@0.1.2/dist/kuromoji.js"></script>
 </head>
 <body>
-  <h1>小野字幕君</h1>
-  <div class="container">
-    <!-- 左侧：视频搜索、播放与笔记功能 -->
-    <div class="left-panel">
-      <input type="text" id="videoUrl" placeholder="输入 Bilibili 或 泰剧网链接">
-      <button onclick="loadVideo()">播放视频</button>
-      <div class="video-container">
-        <iframe id="videoFrame" class="video-iframe" allowfullscreen></iframe>
+  <header>
+    <div id="siteTitle">小野字幕君</div>
+    <div id="controlsPanel">
+      <div id="videoInputContainer">
+        <input type="text" id="videoUrl" placeholder="请输入视频链接（如哔哩哔哩、YouTube、泰剧网等）" style="width: 200px;">
+        <button id="loadVideo">加载视频</button>
       </div>
-      <!-- 添加笔记功能 -->
-      <div class="note-container">
-        <textarea id="noteInput" placeholder="在这里记录你的笔记..."></textarea>
-        <button onclick="saveNote()">保存笔记</button>
-        <div id="noteDisplay"></div>
+      <div id="controls">
+        <button id="playBtn">启动同步（记得同时播放视频）</button>
+        <button id="pauseBtn" disabled>暂停同步</button>
+        <label>时间偏移 (秒):
+          <input type="number" id="timeOffset" value="0" step="0.1" style="width: 60px;">
+        </label>
+      </div>
+      <div id="fileLoader">
+        <input type="file" id="srtFile" accept=".srt">
       </div>
     </div>
+  </header>
 
-    <!-- 右侧：文件选择、字幕解析和字幕搜索 -->
-    <div class="right-panel">
-      <input type="file" id="fileInput" accept=".ass,.srt,.docx">
-      <input type="text" id="searchBox" placeholder="搜索字幕..." oninput="searchSubtitles()">
-      <div class="subtitle-container">
-        <div id="subtitles"></div>
-      </div>
+  <!-- 主容器：左侧视频区域，右侧字幕区域 -->
+  <div id="main-container">
+    <div id="video-container">
+      <!-- 初始示例视频（可以通过上方输入更新） -->
+      <iframe id="videoPlayer" src="https://i.taijuwang.com/" allowfullscreen></iframe>
+    </div>
+    <div id="subtitleContainer">
+      <ul id="subList"></ul>
     </div>
   </div>
 
   <script>
-    // ---------------------------
-    // 构建日文分词器（kuromoji）
-    // ---------------------------
-    let tokenizer = null;
-    kuromoji.builder({
-      // 确保将下载好的 dict 文件夹与此文件置于同目录下，
-      // 或根据实际情况调整路径，如 "path/to/dict/"
-      dicPath: "dict/"
-    }).build((err, builtTokenizer) => {
-      if (err) {
-        console.error("构建分词器失败：", err);
-        return;
+    // 全局变量
+    let subtitles = [];
+    let timer = null;
+    let currentTime = 0;
+
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const timeOffsetInput = document.getElementById('timeOffset');
+    const subListUl = document.getElementById('subList');
+
+    // 如果文本中包含汉字(平假名)格式，将其转换为 ruby 显示（可选）
+    function applyFurigana(text) {
+      return text.replace(/([\u4E00-\u9FFF]+)\(([\u3040-\u309F]+)\)/g,
+                           '<ruby>$1<rt>$2</rt></ruby>');
+    }
+
+    // 解析 SRT 字幕文件：提取序号、开始与结束时间及字幕内容
+    function parseSRT(data) {
+      data = data.replace(/^\uFEFF/, '').replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const regex = /(\d+)\n([\d:,]+)\s*-->\s*([\d:,]+)\n([\s\S]*?)(?=\n\n|$)/g;
+      let result;
+      const parsed = [];
+      function timeStrToSeconds(timeStr) {
+        const parts = timeStr.split(',');
+        const [h, m, s] = parts[0].split(':');
+        return parseInt(h, 10) * 3600 +
+               parseInt(m, 10) * 60 +
+               parseInt(s, 10) +
+               parseInt(parts[1], 10) / 1000;
       }
-      tokenizer = builtTokenizer;
-      console.log("kuromoji tokenizer 加载完毕！");
-    });
-
-    // ---------------------------
-    // 片假名转平假名函数
-    // ---------------------------
-    function katakanaToHiragana(text) {
-      return text.replace(/[\u30a1-\u30f6]/g, function(match) {
-        return String.fromCharCode(match.charCodeAt(0) - 0x60);
-      });
-    }
-
-    // ---------------------------
-    // 自动添加平假名（Furigana）的函数
-    // ---------------------------
-    function addFuriganaToText(text) {
-      // 如果 tokenizer 还没加载完，直接返回原文本
-      if (!tokenizer) return text;
-      const tokens = tokenizer.tokenize(text);
-      let result = "";
-      tokens.forEach(token => {
-        // 如果 token 有读音并且包含汉字，则添加假名
-        if (token.reading && /[一-龯]/.test(token.surface_form)) {
-          let hiragana = katakanaToHiragana(token.reading);
-          result += `<ruby>${token.surface_form}<rt>${hiragana}</rt></ruby>`;
-        } else {
-          result += token.surface_form;
-        }
-      });
-      return result;
-    }
-
-    // ---------------------------
-    // 视频播放功能
-    // ---------------------------
-    function loadVideo() {
-      const inputUrl = document.getElementById('videoUrl').value.trim();
-      const videoFrame = document.getElementById('videoFrame');
-      try {
-        const url = new URL(inputUrl);
-        if (url.hostname.includes('bilibili.com')) {
-          const bvid = getBilibiliId(inputUrl);
-          if (bvid) {
-            videoFrame.src = `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=0`;
-            return;
-          }
-        } else if (url.hostname.includes('taijuwang.com')) {
-          videoFrame.src = inputUrl;
-          return;
-        }
-        throw new Error('不支持的平台或链接格式');
-      } catch (e) {
-        alert('⚠️ 错误: 请输入正确的视频链接');
+      while ((result = regex.exec(data)) !== null) {
+        parsed.push({
+          index: parseInt(result[1], 10),
+          start: timeStrToSeconds(result[2]),
+          end: timeStrToSeconds(result[3]),
+          text: result[4].trim()
+        });
       }
+      return parsed;
     }
 
-    function getBilibiliId(url) {
-      const match = url.match(/\/video\/(BV\w+)/);
-      return match ? match[1] : null;
-    }
-
-    // ---------------------------
-    // 文件解析相关
-    // ---------------------------
-    document.getElementById('fileInput').addEventListener('change', function(event) {
+    // 当 SRT 文件选择后进行解析和生成字幕列表
+    document.getElementById('srtFile').addEventListener('change', function(event) {
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        try {
-          if (file.name.endsWith('.docx')) {
-            parseDOCX(e.target.result, displaySubtitles);
-          } else {
-            const content = e.target.result;
-            const subtitles = file.name.endsWith('.ass') ? parseASS(content) : parseSRT(content);
-            displaySubtitles(subtitles);
-          }
-        } catch (error) {
-          showError(`解析失败: ${error.message}`);
+        const content = e.target.result;
+        subtitles = parseSRT(content);
+        if (subtitles.length === 0) {
+          console.error("未能解析字幕，请检查 SRT 文件格式");
+        } else {
+          buildSubtitleList();
         }
       };
-      reader.onerror = () => showError('文件读取失败');
-      file.name.endsWith('.docx') ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'utf-8');
+      reader.onerror = function(e) {
+        console.error("读取文件出错：", e);
+      };
+      reader.readAsText(file, "UTF-8");
     });
 
-    // 移除 BOM 的辅助函数
-    function removeBOM(text) {
-      return text.replace(/^\uFEFF/, '');
-    }
-
-    function parseASS(content) {
-      return content.split('\n')
-        .filter(line => line.startsWith('Dialogue:'))
-        .map(line => {
-          const parts = line.split(',');
-          return { text: parts.slice(9).join(',').replace(/\\N/g, ' ').replace(/\{.*?\}/g, '') };
+    // 生成字幕列表（右侧列表自动添加点击跳转功能）
+    function buildSubtitleList() {
+      subListUl.innerHTML = "";
+      subtitles.forEach((sub, idx) => {
+        const li = document.createElement("li");
+        li.innerHTML = `${sub.index}: ${applyFurigana(sub.text)} (${sub.start.toFixed(1)}秒)`;
+        li.addEventListener("click", function() {
+          jumpToSubtitle(sub.start);
         });
-    }
-
-    function parseSRT(content) {
-      content = removeBOM(content).replace(/\r/g, '');
-      return content.split(/\n\n+/)
-        .map(block => {
-          const lines = block.split('\n').filter(l => l.trim());
-          return lines.length >= 3 ? { text: lines.slice(2).join(' ') } : null;
-        })
-        .filter(Boolean);
-    }
-
-    function parseDOCX(arrayBuffer, callback) {
-      mammoth.convertToHtml({ arrayBuffer }).then(result => {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = result.value;
-        const subtitles = Array.from(tempDiv.querySelectorAll('p'))
-          .filter(p => p.textContent.trim() !== '')
-          .map(p => ({ text: p.textContent.trim() }));
-        callback(subtitles);
-      }).catch(err => showError(`DOCX解析失败: ${err.message}`));
-    }
-
-    // ---------------------------
-    // 显示字幕 —— 调用自动添加平假名函数
-    // ---------------------------
-    function displaySubtitles(subtitles) {
-      const container = document.getElementById('subtitles');
-      container.innerHTML = subtitles.map((sub, index) => `
-        <div class="subtitle ${index % 2 ? 'color2' : 'color1'}">
-          ${addFuriganaToText(sub.text || '空字幕内容')}
-        </div>
-      `).join('');
-    }
-
-    function showError(message) {
-      const container = document.getElementById('subtitles');
-      container.innerHTML = `<div class="subtitle color2">❌ ${message}</div>`;
-    }
-
-    function searchSubtitles() {
-      const query = document.getElementById('searchBox').value.trim().toLowerCase();
-      document.querySelectorAll('.subtitle').forEach(subtitle => {
-        subtitle.style.display = subtitle.textContent.toLowerCase().includes(query) ? 'block' : 'none';
+        subListUl.appendChild(li);
       });
     }
 
-    // ---------------------------
-    // 新增笔记保存功能
-    // ---------------------------
-    function saveNote() {
-      const noteText = document.getElementById('noteInput').value.trim();
-      if (!noteText) {
-        alert("请输入笔记内容后再保存！");
+    // 根据当前播放时间更新字幕的高亮状态，并自动滚动
+    function updateSubtitles() {
+      const offset = parseFloat(timeOffsetInput.value) || 0;
+      const displayTime = currentTime + offset;
+      subtitles.forEach((sub, idx) => {
+        const li = subListUl.children[idx];
+        if (displayTime >= sub.start && displayTime <= sub.end) {
+          li.classList.add("active");
+          li.scrollIntoView({ block: "center", behavior: "smooth" });
+        } else {
+          li.classList.remove("active");
+        }
+      });
+    }
+
+    // 模拟视频播放进度，每 100 毫秒递增 0.1 秒
+    function startTimer() {
+      timer = setInterval(function() {
+        currentTime += 0.1;
+        updateSubtitles();
+      }, 100);
+    }
+    function stopTimer() {
+      clearInterval(timer);
+      timer = null;
+    }
+    playBtn.addEventListener("click", function() {
+      if (!timer) {
+        startTimer();
+        playBtn.disabled = true;
+        pauseBtn.disabled = false;
+      }
+    });
+    pauseBtn.addEventListener("click", function() {
+      if (timer) {
+        stopTimer();
+        playBtn.disabled = false;
+        pauseBtn.disabled = true;
+      }
+    });
+    function jumpToSubtitle(time) {
+      const offset = parseFloat(timeOffsetInput.value) || 0;
+      currentTime = time - offset;
+      updateSubtitles();
+    }
+
+    /* 
+       扩展支持更多影视网站：
+       getEmbedUrl 根据用户输入的链接判断来源，目前支持：
+         - 哔哩哔哩（自动提取 BV 号，不再使用 cid 参数）
+         - YouTube（支持 www.youtube.com 和 youtu.be 链接）
+         - 泰剧网（如 https://i.taijuwang.com/v/93064.html，可直接嵌入观看）
+       注意：部分网站可能由于版权或嵌入政策限制，无法直接嵌入。
+    */
+    function getEmbedUrl(inputUrl) {
+      // 如果已是嵌入地址，则直接返回
+      if (inputUrl.indexOf("player.bilibili.com") !== -1) {
+        return inputUrl;
+      }
+      // 泰剧网支持：直接返回输入链接
+      if (inputUrl.indexOf("taijuwang.com") !== -1) {
+        return inputUrl;
+      }
+      // 哔哩哔哩支持：自动提取 BV 号
+      if (inputUrl.indexOf("bilibili.com") !== -1) {
+        const bvidMatch = inputUrl.match(/\/(BV[\w\d]+)/);
+        if (bvidMatch && bvidMatch[1]) {
+          const bvid = bvidMatch[1];
+          return "https://player.bilibili.com/player.html?bvid=" + bvid + "&page=1";
+        }
+      }
+      // YouTube 支持 - 标准链接
+      if (inputUrl.indexOf("youtube.com") !== -1) {
+        try {
+          const urlObj = new URL(inputUrl);
+          const videoId = urlObj.searchParams.get("v");
+          if (videoId) return "https://www.youtube.com/embed/" + videoId;
+        } catch (e) {
+          console.error("Invalid YouTube URL", e);
+        }
+      }
+      // YouTube 支持 - 短链接
+      if (inputUrl.indexOf("youtu.be") !== -1) {
+        const parts = inputUrl.split("/");
+        const videoId = parts[parts.length - 1];
+        if (videoId) return "https://www.youtube.com/embed/" + videoId;
+      }
+      // 其它网站……
+      return inputUrl;
+    }
+
+    // 更新视频播放：将用户输入链接转换为对应的嵌入地址
+    function updateVideo() {
+      const videoUrl = document.getElementById("videoUrl").value.trim();
+      if (videoUrl === "") {
+        alert("请输入有效的视频链接。");
         return;
       }
-      document.getElementById('noteDisplay').innerHTML = `<p>📌 ${noteText}</p>`;
-      alert("笔记已保存！");
+      const embedUrl = getEmbedUrl(videoUrl);
+      document.getElementById("videoPlayer").src = embedUrl;
     }
+    document.getElementById("loadVideo").addEventListener("click", updateVideo);
   </script>
-
-  <footer style="margin-top: 20px; padding: 10px; text-align: center; font-size: 14px; color: #555;">
-    网页版权来自闲鱼号：青空
-  </footer>
 </body>
 </html>
